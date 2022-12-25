@@ -1,7 +1,7 @@
 pandas
 bs4
 duckduckgo_search
-dotenv
+python-dotenv
 openai
 flask
 pinecone-client
