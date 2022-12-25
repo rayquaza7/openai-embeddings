@@ -1,6 +1,6 @@
 from flask import Flask
 from flask import request
-from utils import *
+from api.utils import *
 
 app = Flask(__name__)
 
@@ -26,4 +26,4 @@ def create_embeddings(question):
     df = get_df_embeddings(df)
     add_to_pinecone(df)
     context = construct_prompt(question)
-    return "context"
+    return context

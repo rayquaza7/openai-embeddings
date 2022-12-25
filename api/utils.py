@@ -10,6 +10,7 @@ import re
 # annoying coz conda doesnt list it, so have to install pip in venv and then use the venv's pip to install it
 import pinecone
 from tqdm.auto import tqdm
+import psycopg2
 
 # set constants
 EMBEDDINGS_MODEL = "text-embedding-ada-002"
@@ -34,6 +35,9 @@ if pinecone is None:
     print("pinecone api key not found")
 
 index = pinecone.Index('openai')
+
+# Connect to your postgres DB
+conn = psycopg2.connect(os.environ.get('DB'))
 
 # 1000 tokens ~ 750 words; there is no way to get the number of tokens from the API for 2nd gen models for now
 # 1 token ~ 4 characters
@@ -96,8 +100,8 @@ def construct_prompt(question: str) -> str:
     """
     query_embedding = get_embedding(question)
     res = index.query([query_embedding], top_k=5, include_metadata=True)
-    token_len = 0
     header = """Context:\n"""
+    token_len = 2 + token_estimate(question)
 
     for match in res["matches"]:
         # compute token length for match metadata
@@ -106,6 +110,9 @@ def construct_prompt(question: str) -> str:
         # one for the separator
         token_len += metadata_len + 1
         if token_len > MAX_SECTION_LEN:
+            # add as much as u can
+            header += metadata[:MAX_SECTION_LEN -
+                               int(token_len)] + SEPARATOR + "..."
             break
         header += metadata + SEPARATOR
     return header
@@ -116,15 +123,46 @@ def ddg_extract(question: str) -> pd.DataFrame:
     Get top 3 links for a given query
     Get results from 2022
     extract all <p> tags and put them in pinecone
+    if reseult already embedded, skip it
     """
     # get top 3 links
-    results = ddg(question, region='wt-wt', safesearch='Off', max_results=3)
+    results = ddg(question, region='wt-wt', safesearch='Off', max_results=2)
     df = pd.DataFrame(columns=['content'])
     # get text from each link
     for result in results:
+        # check if link is already in db
+        if check_if_in_db(result['href']):
+            continue
+        # add link to db
+        add_to_db(result['href'])
+        # get text from link
         soup = BeautifulSoup(requests.get(result['href']).text, 'html.parser')
         p_tags = soup.find_all('p')
         df1 = pd.DataFrame(columns=['content'])
         df1['content'] = [p_tag.text for p_tag in p_tags]
         df = pd.concat([df, df1], ignore_index=True)
     return df
+
+
+def add_to_db(url):
+    # Open a cursor to perform database operations
+    cur = conn.cursor()
+    # Execute a command: this creates a new table
+    cur.execute("INSERT INTO websites_seen (url) VALUES (%s)", (url,))
+    # Make the changes to the database persistent
+    conn.commit()
+    # Close communication with the database
+    cur.close()
+
+
+def check_if_in_db(url):
+    # Open a cursor to perform database operations
+    cur = conn.cursor()
+    # Execute a command: this creates a new table
+    cur.execute("SELECT * FROM websites_seen WHERE url = %s", (url,))
+    # Make the changes to the database persistent
+    res = cur.fetchone()
+    # Close communication with the database
+    cur.close()
+    # return false if not in db
+    return res is not None
