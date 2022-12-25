@@ -1,11 +1,16 @@
 from flask import Flask
 from flask import request
 from api.utils import *
+from flask_cors import CORS, cross_origin
+
 
 app = Flask(__name__)
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
 
 
 @app.get("/")
+@cross_origin()
 def hello_world():
     return "<p>Hello, World!</p>"
 
@@ -14,6 +19,7 @@ def hello_world():
 
 
 @app.post("/context")
+@cross_origin()
 def get_context():
     question = request.form['question']
     context = create_embeddings(question)
