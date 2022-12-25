@@ -1,5 +1,7 @@
 pandas
-numpy
+bs4
+duckduckgo_search
+dotenv
 openai
 flask
 pinecone-client
